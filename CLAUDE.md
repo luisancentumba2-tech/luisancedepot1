@@ -131,13 +131,66 @@ Ce sont des bugs réels, chacun confirmé par test isolé avant correction :
   dimanche→veille programmée en formule ; cas samedi laissé en ajustement
   manuel (pratique gouvernementale incohérente d'une année à l'autre).
 
-## Chantier en cours au moment du transfert
+## Chantier « devise contractuelle par agent » — terminé (déjà présent au transfert)
 
-Ajout d'une **devise contractuelle par agent** (CDF ou USD, conversion vers
-le CDF légal de calcul) — question de conception non tranchée : taux de
-change **unique** (comme aujourd'hui) ou **taux mensuel sur plusieurs années**
-(comme dans le fichier tiers étudié) ? À trancher avec l'utilisateur avant de
-construire.
+Contrairement à ce que ce fichier disait au moment du transfert, la version
+du classeur reçue avait déjà cette fonctionnalité entièrement construite :
+EMPLOYES colonnes Z (« Devise du contrat », CDF/USD, liste déroulante) et AA
+(« Montant négocié converti (CDF) » = `IF(Z="USD", P*opt_taux_change, P)`),
+avec **taux unique** (`opt_taux_change`, PARAMETRES!C22 — confirmé le choix
+de conception avec l'utilisateur). BULLETIN et JOURNAL consomment bien le
+montant converti (colonne Y, résolu à partir de AA), jamais le montant brut
+négocié (P). Vérifié : recalcul indépendant en Python de l'inversion
+net→brut sur l'agent 16 (500 USD, mode "Net salaire seul") — `0,95B −
+IPR(B) = 1 450 000` → `B = 1 788 200 CDF`, exact match avec la valeur en
+cache du fichier. Rien à construire ; aucune modification faite sur ce point.
+
+## Chantier « clôture automatique HISTORIQUE » — macro VBA livrée en .xlsm séparé
+
+`Morning_SARL_Systeme_Paie_RH_RDC.xlsm` (généré par `tools/build_xlsm.py` —
+relancer ce script après toute modification du .xlsx pour regénérer le
+.xlsm à jour) est une **copie séparée**, avec macro, du .xlsx canonique (qui reste volontairement sans macro, cf. « Construit
+entièrement en formules Excel pures » ci-dessus). Il ajoute une macro
+`ClotureDuMois` (Alt+F8 pour l'exécuter — pas de bouton graphique, voir
+pourquoi ci-dessous) qui automatise exactement la procédure manuelle déjà
+documentée dans HISTORIQUE!B5:B9 : copie figée (valeurs) de JOURNAL vers le
+bloc du mois en cours dans HISTORIQUE, statut « Clos » + date, puis avance
+PARAMETRES!C30/C29 au mois suivant. Refuse d'écraser un bloc déjà clos.
+
+**Limite connue, non résolue** : HISTORIQUE n'a que 12 blocs nommés par mois
+(pas par année) — la macro (comme la procédure manuelle) ne peut donc
+archiver qu'une seule année à la fois. Fermer un mois d'une deuxième année
+alors que son bloc est déjà « Clos » est bloqué explicitement (message
+d'erreur clair) plutôt que d'écraser l'archive. Étendre HISTORIQUE pour
+plusieurs années (nouveaux blocs en fin de feuille, append-only) reste à
+faire — c'est justement la question laissée ouverte par le fichier tiers
+`SIMULATION_10ans_30agents.xlsm` mentionné plus haut, jamais tranchée.
+
+**Comment le vbaProject.bin a été construit sans Excel/Windows/COM** (cet
+environnement Claude Code est Linux) : voir la docstring de
+`tools/build_xlsm.py` pour le détail complet. En résumé — un vbaProject.bin
+réel généré par Excel (tiré des exemples de la bibliothèque XlsxWriter,
+BSD, prévu pour cet usage) sert de gabarit ; son module `Module1` est
+remplacé par le code de `tools/vba/ClotureDuMois.bas`, recompressé avec une
+implémentation MS-OVBA (2.4.1) écrite pour l'occasion (`tools/vba/
+ovba_compress.py`, mode littéral seul, vérifiée par aller-retour via le
+décompresseur de référence d'oletools) ; le conteneur OLE2/MS-CFB est
+reconstruit de zéro (`tools/vba/cfb_writer.py`) car `olefile` ne sait
+réécrire un flux qu'à taille identique.
+
+**Vérifié** : extraction du code via `oletools.olevba`, sur le `.bin` seul
+et sur le `.xlsm` final, identique octet pour octet à `ClotureDuMois.bas` ;
+structure OLE2 valide (`olefile`) ; chargement complet du `.xlsm` par
+`openpyxl` avec les mêmes 65 noms définis, les mêmes 16 072 formules et les
+mêmes 186 validations de données que le `.xlsx` source (donc le passage par
+openpyxl pour ajouter la note d'instruction n'a rien cassé).
+**Non vérifié — à faire avant tout usage réel** : aucun test dans Excel
+réel (impossible dans cet environnement, pas de Windows/COM disponible).
+La macro n'a donc jamais tourné pour de vrai ; seule sa présence et son
+intégrité structurelle sont prouvées. C'est pourquoi il n'y a pas de bouton
+graphique (Form Control) — sa géométrie/rendu VML n'aurait pas pu être
+vérifié non plus, et un XML mal formé y aurait été plus risqué qu'utile
+pour peu de gain face à Alt+F8.
 
 ## Discipline de travail attendue
 
